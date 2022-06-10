@@ -30,6 +30,21 @@ def reset_time_index(ride_data):
     ride_data.index = ride_data.index - ride_data.index[0]
     return ride_data
 
+def calculate_battery_power(data):
+     return data['input_voltage'] * data['current_in']
+
+def calculate_mechanical_power(data, Kv):
+    # line to line electrical constant in volt-sec/rad
+    K_eLL = 9.55 / Kv
+    # three phase torque constant from Mevey 2.57 and 2.60
+    # assumes VESC 'current motor' is peak value
+    SQRT3 = 1.732
+    PI = 3.1415
+    K_T = SQRT3 / 2 * K_eLL
+    mechanical_speed = data['erpm'] / 60 / 23 * 2 * PI
+    torque = data['current_motor'] * K_T
+    return mechanical_speed * torque
+
 def create_speed_gps_erpm(ride_data):
     # normalize erpm and then multiply by max GPS speed
     return ride_data['erpm'] / ride_data['erpm'].max() * ride_data['gnss_gVel'].max()
@@ -122,6 +137,7 @@ def plot_current_acceleration(data):
     axa.set_ylabel('Acceleration (m/sec$^2$)', color=color)
     axa.tick_params(axis='y', labelcolor=color)
     ax.set_xlabel('Time (sec)')
+    ax.set_title('Observed Acceleration')
 
 def plot_internal_resistance(data):
     fit = np.polyfit(data['current_in'], data['input_voltage'], 1)
@@ -136,7 +152,7 @@ def plot_internal_resistance(data):
 
     ax.set_xlabel('Battery Current (A)')
     ax.set_ylabel('Battery Voltage (V)')
-    fig.suptitle('Voltage Sag and Internal Resistance')
+    ax.set_title('Voltage Sag and Internal Resistance')
 
 def plot_performance(ride_data):
     columns = ['motor_current', 'battery_voltage', 'battery_current', 'speed_mph', 'power_electrical']
@@ -160,3 +176,26 @@ def motor_temp_delta(vesc_data):
 
 def controller_temp_delta(vesc_data):
     return vesc_data.iloc[-1]['temp_mos_max'] - vesc_data.iloc[0]['temp_mos_max']
+
+def plot_powers(data):
+    # create and plot electrical power
+    # create and plot mechanical power
+    fig, ax = plt.subplots()
+    ax.plot(data.index, data['battery_power'], label='Battery')
+    ax.plot(data.index, data['mechanical_power'], label='Motor')
+    ax.set_xlabel('Time (sec)')
+    ax.set_ylabel('Power (W)')
+    ax.legend()
+    ax.grid()
+    ax.set_title('Observed Power Output')
+    plt.show()
+
+def plot_efficiency(data):
+    # divide and plot
+    fig, ax = plt.subplots()
+    ax.plot(data.index, data['mechanical_power'] / data['battery_power'])
+    ax.set_ylim((0, 1.2))
+    ax.set_xlabel('Time (sec)')
+    ax.set_ylabel('Efficiency')
+    ax.grid()
+    ax.set_title('Efficiency (Mechanical/Electrical)')
